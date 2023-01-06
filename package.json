@@ -3,12 +3,19 @@
   "scripts": {
     "build": "npx thirdweb@latest detect",
     "deploy": "npx thirdweb@latest deploy",
-    "release": "npx thirdweb@latest release"
+    "release": "npx thirdweb@latest release",
+    "test": "npx thirdweb@latest test"
   },
   "devDependencies": {
-    "hardhat": "^2.10.1"
+    "@types/chai": "^4.3.4",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^18.11.18",
+    "chai": "^4.3.7",
+    "hardhat": "^2.10.1",
+    "thirdweb": "^0.9.6"
   },
   "dependencies": {
-    "@thirdweb-dev/contracts": "^3"
+    "@thirdweb-dev/contracts": "^3",
+    "dotenv": "^16.0.3"
   }
 }
