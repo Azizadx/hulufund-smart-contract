@@ -3,13 +3,14 @@ pragma solidity ^0.8.0;
 
 contract Equb {
     uint256 public numberOfPools;
-    struct PoolInfo {
-        string[] poolNames;
-        string[] poolImage;
+    struct PoolData {
+        address equbAddress;
+        string poolName;
+        string poolImage;
     }
 
     struct Pool {
-        address creator;
+        address equbAddress;
         string name;
         string profileUrl;
         string email;
@@ -42,7 +43,7 @@ contract Equb {
         // Check if the sender (creator) has already created a pool
         for (uint i = 0; i < pools.length; i++) {
             require(
-                pools[i].creator != msg.sender,
+                pools[i].equbAddress != msg.sender,
                 "Only one pool creation per address is allowed"
             );
         }
@@ -86,9 +87,9 @@ contract Equb {
         )
     {
         for (uint i = 0; i < pools.length; i++) {
-            if (pools[i].creator == creator) {
+            if (pools[i].equbAddress == creator) {
                 return (
-                    pools[i].creator,
+                    pools[i].equbAddress,
                     pools[i].name,
                     pools[i].profileUrl,
                     pools[i].email,
@@ -122,20 +123,21 @@ contract Equb {
 
     function getPoolByMember(
         address member
-    ) public view returns (PoolInfo memory) {
-        PoolInfo memory poolInfo;
-        poolInfo.poolNames = new string[](numberOfPools);
-        poolInfo.poolImage = new string[](numberOfPools);
+    ) public view returns (PoolData[] memory) {
+        PoolData[] memory poolData = new PoolData[](numberOfPools);
         uint k = 0;
         for (uint i = 0; i < pools.length; i++) {
             for (uint j = 0; j < pools[i].members.length; j++) {
                 if (pools[i].members[j] == member) {
-                    poolInfo.poolNames[k] = pools[i].name;
-                    poolInfo.poolImage[k] = pools[i].profileUrl;
+                    poolData[k] = PoolData(
+                        pools[i].equbAddress,
+                        pools[i].name,
+                        pools[i].profileUrl
+                    );
                     k++;
                 }
             }
         }
-        return poolInfo;
+        return poolData;
     }
 }
