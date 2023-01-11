@@ -39,6 +39,8 @@ contract Equb {
 
     event SkipContributionEvent(address member, address equbAddress);
     event MemberRemovedEvent(address member, address equbAddress);
+    event NextContributionTime(uint time);
+    event Success(string message);
 
     function hasContributed(
         address equbAddress,
@@ -150,11 +152,10 @@ contract Equb {
                         pools[i].profileUrl
                     );
                     k++;
-                } else {
-                    revert("You Have Not Join Or Create Equb");
                 }
             }
         }
+        require(k > 0, "Member not found in any pool.");
         return poolData;
     }
 
@@ -175,35 +176,40 @@ contract Equb {
             contAmount == pools[poolIndex].contributionAmount,
             "Contribution amount is incorrect."
         );
-        require(
-            contributions[equbAddress][member] == false,
-            "You have already contributed for this period."
-        );
-        require(
-            pools[poolIndex].contributionSkipCount < 3,
-            "You have skipped the contribution for three times, You will be removed from the pool."
-        );
         //Check the current time and compare it to the contribution date
         uint currentTime = block.timestamp;
-        uint contributionPeriod = currentTime -
-            pools[poolIndex].contributionDate;
-        require(
-            contributionPeriod <= 60 * 60 * 24 * 25,
-            "Contribution period has ended."
-        );
+        uint nextContributionTime = pools[poolIndex].contributionDate +
+            86400 *
+            30;
+        if (currentTime < nextContributionTime) {
+            emit NextContributionTime(nextContributionTime);
+            return;
+        } else if (
+            currentTime >= nextContributionTime &&
+            currentTime < nextContributionTime + 60 * 60 * 24 * 7
+        ) {
+            if (contributions[equbAddress][member] == false) {
+                // Add the contribution amount to the pool balance
+                pools[poolIndex].equbBalance += contAmount;
 
-        // Add the contribution amount to the pool balance
-        pools[poolIndex].equbBalance += contAmount;
+                // Mark the contribution as done
+                contributions[equbAddress][member] = true;
 
-        // Mark the contribution as done
-        contributions[equbAddress][member] = true;
-
-        // Emit the Contribution event
-        emit ContributionEvent(
-            member,
-            contAmount,
-            pools[poolIndex].equbBalance
-        );
+                // Emit the Contribution event
+                emit ContributionEvent(
+                    member,
+                    contAmount,
+                    pools[poolIndex].equbBalance
+                );
+                emit Success("You have successfully contributed to the pool");
+            } else {
+                pools[poolIndex].contributionSkipCount++;
+                emit SkipContributionEvent(member, equbAddress);
+            }
+        } else if (currentTime >= nextContributionTime + 60 * 60 * 24 * 7) {
+            pools[poolIndex].contributionSkipCount++;
+            emit SkipContributionEvent(member, equbAddress);
+        }
     }
 
     function getPoolIndex(address equbAddress) private view returns (uint) {
@@ -245,6 +251,28 @@ contract Equb {
                 delete pools[index].members[i];
                 break;
             }
+        }
+    }
+
+    function getSkipsLeft(
+        address equbAddress,
+        address member
+    ) public view returns (uint) {
+        // Find the pool by equbAddress
+        uint poolIndex;
+        for (uint i = 0; i < pools.length; i++) {
+            if (pools[i].equbAddress == equbAddress) {
+                poolIndex = i;
+                break;
+            }
+        }
+        // Check if the member has contributed
+        if (!contributions[equbAddress][member]) {
+            // If the member has not contributed, skipsLeft = 3
+            return 3;
+        } else {
+            // If the member has contributed, calculate skipsLeft
+            return 3 - pools[poolIndex].contributionSkipCount;
         }
     }
 }
