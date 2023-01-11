@@ -136,6 +136,20 @@ contract Equb {
         revert("No pool created by this address");
     }
 
+    // function getNumberOfPoolsByMember(
+    //     address member
+    // ) public view returns (uint) {
+    //     uint count = 0;
+    //     for (uint i = 0; i < pools.length; i++) {
+    //         for (uint j = 0; j < pools[i].members.length; j++) {
+    //             if (pools[i].members[j] == member) {
+    //                 count++;
+    //             }
+    //         }
+    //     }
+    //     return count;
+    // }
+
     function getPoolByMember(
         address member
     ) public view returns (PoolData[] memory) {
@@ -150,8 +164,6 @@ contract Equb {
                         pools[i].profileUrl
                     );
                     k++;
-                } else {
-                    revert("You Have Not Join Or Create Equb");
                 }
             }
         }
@@ -188,7 +200,7 @@ contract Equb {
         uint contributionPeriod = currentTime -
             pools[poolIndex].contributionDate;
         require(
-            contributionPeriod <= 60 * 60 * 24 * 25,
+            contributionPeriod <= 60 * 60 * 24 * 30,
             "Contribution period has ended."
         );
 
