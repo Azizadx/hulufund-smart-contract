@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "./BokkyPooBahsDateTimeContract.sol";
 
 contract Equb {
     using SafeMath for uint;
     uint256 public numberOfPools;
+    address timeContractAddress = 0x4385483b852D01655A7e760F616725C0c3db9873;
+    BokkyPooBahsDateTimeContract timeContract =
+        BokkyPooBahsDateTimeContract(timeContractAddress);
     struct PoolData {
         address equbAddress;
         string poolName;
@@ -18,7 +22,7 @@ contract Equb {
         string email;
         string description;
         uint contributionAmount;
-        uint contributionDate;
+        uint contributionDate; //5
         uint equbBalance;
         uint contributionSkipCount;
         string website;
@@ -165,50 +169,53 @@ contract Equb {
         uint contAmount
     ) public {
         // Find the pool by equbAddress
-        uint poolIndex;
-        for (uint i = 0; i < pools.length; i++) {
-            if (pools[i].equbAddress == equbAddress) {
-                poolIndex = i;
-                break;
-            }
-        }
+        uint poolIndex = getPoolIndex(equbAddress);
         require(
             contAmount == pools[poolIndex].contributionAmount,
             "Contribution amount is incorrect."
         );
-        //Check the current time and compare it to the contribution date
-        uint currentTime = block.timestamp;
-        uint nextContributionTime = pools[poolIndex].contributionDate +
-            86400 *
-            30;
-        if (currentTime < nextContributionTime) {
-            emit NextContributionTime(nextContributionTime);
-            return;
-        } else if (
-            currentTime >= nextContributionTime &&
-            currentTime < nextContributionTime + 60 * 60 * 24 * 7
-        ) {
-            if (contributions[equbAddress][member] == false) {
-                // Add the contribution amount to the pool balance
-                pools[poolIndex].equbBalance += contAmount;
 
-                // Mark the contribution as done
-                contributions[equbAddress][member] = true;
+        //check the member skip count
+        uint skipCount = getRemainingSkipCount(equbAddress, member);
+        if (skipCount < 3) {
+            removeMember(equbAddress, member);
+            revert(
+                "You have skipped the contribution for three times, You will be removed from the pool."
+            );
+        }
 
-                // Emit the Contribution event
-                emit ContributionEvent(
-                    member,
-                    contAmount,
-                    pools[poolIndex].equbBalance
-                );
-                emit Success("You have successfully contributed to the pool");
-            } else {
-                pools[poolIndex].contributionSkipCount++;
+        //Check the current date and compare it to the contribution date
+        uint256 today = timeContract.getDay(block.timestamp);
+        // uint256 month = BokkyPooBahsDateTimeLibrary.getMonth(block.timestamp);
+        // uint256 year = BokkyPooBahsDateTimeLibrary.getYear(block.timestamp);
+        //if the day pass
+        if (today > pools[poolIndex].contributionDate) {
+            //check if this is first time that member skip contribution
+            if (contributions[equbAddress][member]) {
+                //increment the skip count
+                pools[poolIndex].contributionSkipCount += 1;
+                //Emit event
                 emit SkipContributionEvent(member, equbAddress);
+                if (skipCount == 2) {
+                    //remove the member from the pool
+                    removeMember(equbAddress, member);
+                    emit MemberRemovedEvent(member, equbAddress);
+                }
             }
-        } else if (currentTime >= nextContributionTime + 60 * 60 * 24 * 7) {
-            pools[poolIndex].contributionSkipCount++;
-            emit SkipContributionEvent(member, equbAddress);
+        } else {
+            // Add the contribution amount to the pool balance
+            pools[poolIndex].equbBalance += contAmount;
+
+            // Mark the contribution as done
+            contributions[equbAddress][member] = true;
+
+            // Emit the Contribution event
+            emit ContributionEvent(
+                member,
+                contAmount,
+                pools[poolIndex].equbBalance
+            );
+            emit NextContributionTime(pools[poolIndex].contributionDate);
         }
     }
 
@@ -221,40 +228,7 @@ contract Equb {
         revert("Pool not found");
     }
 
-    function skipContribution(address equbAddress, address member) public {
-        uint index = getPoolIndex(equbAddress);
-        require(
-            !contributions[equbAddress][member],
-            "You have already contributed for this period or already skipped it"
-        );
-
-        // Check if member has skipped the contribution for three times.
-        if (pools[index].contributionSkipCount == 2) {
-            removeFromArray(equbAddress, member);
-            emit MemberRemovedEvent(member, equbAddress);
-        } else {
-            // Increment the skip count and mark the contribution as skipped
-            pools[index].contributionSkipCount++;
-            contributions[equbAddress][member] = true;
-
-            // Emit the SkipContribution event
-            emit SkipContributionEvent(member, equbAddress);
-        }
-    }
-
-    function removeFromArray(address equbAddress, address member) private {
-        uint index = getPoolIndex(equbAddress);
-        // Iterate through the members array to find the index of the member
-        for (uint i = 0; i < pools[index].members.length; i++) {
-            if (pools[index].members[i] == member) {
-                // Remove the member from the array
-                delete pools[index].members[i];
-                break;
-            }
-        }
-    }
-
-    function getSkipsLeft(
+    function getRemainingSkipCount(
         address equbAddress,
         address member
     ) public view returns (uint) {
@@ -273,6 +247,23 @@ contract Equb {
         } else {
             // If the member has contributed, calculate skipsLeft
             return 3 - pools[poolIndex].contributionSkipCount;
+        }
+    }
+
+    function removeMember(address equbAddress, address member) internal {
+        for (uint i = 0; i < pools.length; i++) {
+            if (pools[i].equbAddress == equbAddress) {
+                address[] memory members = pools[i].members;
+                for (uint j = 0; j < members.length; j++) {
+                    if (members[j] == member) {
+                        //delete the member from the array
+                        delete members[j];
+                        //update the member array
+                        pools[i].members = members;
+                        break;
+                    }
+                }
+            }
         }
     }
 }
