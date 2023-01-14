@@ -2,13 +2,17 @@
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./BokkyPooBahsDateTimeContract.sol";
+import "./PriceConverter.sol";
 
 contract Equb {
     using SafeMath for uint;
-    uint256 public numberOfPools;
+    using PriceConverter for uint256;
+
+    uint256 public numberOfPools = 0;
     address timeContractAddress = 0x4385483b852D01655A7e760F616725C0c3db9873;
     BokkyPooBahsDateTimeContract timeContract =
         BokkyPooBahsDateTimeContract(timeContractAddress);
+    AggregatorV3Interface public priceFeed;
     struct PoolData {
         address equbAddress;
         string poolName;
@@ -21,10 +25,10 @@ contract Equb {
         string profileUrl;
         string email;
         string description;
-        uint contributionAmount;
+        uint contributionAmount; //will be save in wei
         uint contributionDate; //5
         uint equbBalance;
-        uint contributionSkipCount;
+        uint contributionSkipCount; //no need in frontend;
         string website;
         string twitterUrl;
         string facebookUrl;
@@ -45,6 +49,12 @@ contract Equb {
     event MemberRemovedEvent(address member, address equbAddress);
     event NextContributionTime(uint time);
     event Success(string message);
+
+    constructor() {
+        priceFeed = AggregatorV3Interface(
+            0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e
+        );
+    }
 
     function hasContributed(
         address equbAddress,
@@ -81,9 +91,9 @@ contract Equb {
                 _profileUrl,
                 _email,
                 _description,
-                _contributionAmount,
+                _contributionAmount * 1e18,
                 _contributionDate,
-                0,
+                0 * 1e18,
                 0,
                 _website,
                 _twitterUrl,
@@ -113,6 +123,7 @@ contract Equb {
             uint _contributionAmount,
             uint _contributionDate,
             uint _equbBalance,
+            // uint _contributionSkipCount,
             string memory _website,
             string memory _twitterUrl,
             string memory _facebookUrl,
@@ -128,9 +139,16 @@ contract Equb {
                     pools[i].profileUrl,
                     pools[i].email,
                     pools[i].description,
-                    pools[i].contributionAmount,
+                    PriceConverter.getConversionRate(
+                        pools[i].contributionAmount,
+                        priceFeed
+                    ),
                     pools[i].contributionDate,
-                    pools[i].equbBalance,
+                    PriceConverter.getConversionRate(
+                        pools[i].equbBalance,
+                        priceFeed
+                    ),
+                    // pools[i].contributionSkipCount,
                     pools[i].website,
                     pools[i].twitterUrl,
                     pools[i].facebookUrl,
@@ -163,13 +181,11 @@ contract Equb {
         return poolData;
     }
 
-    function contribution(
-        address equbAddress,
-        address member,
-        uint contAmount
-    ) public {
+    function contribution(address equbAddress, address member) public payable {
         // Find the pool by equbAddress
+
         uint poolIndex = getPoolIndex(equbAddress);
+        uint contAmount = msg.value.getConversionRate(priceFeed);
         require(
             contAmount == pools[poolIndex].contributionAmount,
             "Contribution amount is incorrect."

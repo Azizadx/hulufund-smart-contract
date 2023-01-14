@@ -7,6 +7,7 @@
     "test": "npx thirdweb@latest test"
   },
   "devDependencies": {
+    "@chainlink/contracts": "^0.6.0",
     "@nomicfoundation/hardhat-chai-matchers": "^1.0.5",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.0",
     "@nomicfoundation/hardhat-toolbox": "^2.0.1",
@@ -16,12 +17,14 @@
     "@nomiclabs/hardhat-web3": "^2.0.0",
     "@openzeppelin/contracts": "^4.8.0",
     "@openzeppelin/hardhat-upgrades": "^1.22.0",
+    "@openzeppelin/test-helpers": "^0.5.16",
     "@typechain/hardhat": "^6.1.2",
     "@types/chai": "^4.3.4",
     "@types/mocha": "^10.0.1",
     "@types/node": "^18.11.18",
     "chai": "^4.3.7",
     "chai-bn": "^0.3.1",
+    "ethers": "^5.7.2",
     "hardhat": "^2.10.1",
     "hardhat-deploy": "^0.11.22",
     "hardhat-gas-reporter": "^1.0.8",
