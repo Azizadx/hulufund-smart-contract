@@ -28,6 +28,7 @@
     "hardhat": "^2.10.1",
     "hardhat-deploy": "^0.11.22",
     "hardhat-gas-reporter": "^1.0.8",
+    "sol2uml": "^2.4.2",
     "solidity-coverage": "^0.8.1",
     "thirdweb": "^0.9.6",
     "truffle-contract": "^4.0.31",
