@@ -2,9 +2,14 @@
 pragma solidity ^0.8.0;
 // import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 // import "@openzepplin/contracts/Payable.sol";
+// import "@openzeppelin/contracts/block/Block.sol";
+// import "@openzeppelin/contracts/access/AccessControl.sol";
+// import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "./BokkyPooBahsDateTimeContract.sol";
 import "./PriceConsumerV3.sol";
 import "./lib/PriceConverter.sol";
+import "./RaiseFundContract.sol";
 
 contract Equb {
     using SafeMath for uint;
@@ -13,12 +18,13 @@ contract Equb {
     uint256 public numberOfPools = 0;
     address timeContractAddress = 0x4385483b852D01655A7e760F616725C0c3db9873;
     address priceConvertAddress = 0xC33a770be3E9358bdf3876d6aD0eba8fF6B4F70a;
-
     BokkyPooBahsDateTimeContract timeContract =
         BokkyPooBahsDateTimeContract(timeContractAddress);
 
     PriceConsumerV3 priceConsumer = PriceConsumerV3(priceConvertAddress);
     AggregatorV3Interface public priceFeed;
+    RaiseFundContract contractInstance;
+
     struct PoolData {
         address equbAddress;
         string poolName;
@@ -34,6 +40,11 @@ contract Equb {
         string proposerTwitter;
         string proposerTelegram;
         string proposerFacebook;
+        uint voteDuration;
+        // bytes32 transactionHash;
+        bool status;
+        uint yay;
+        uint nay;
     }
     struct Pool {
         address equbAddress;
@@ -54,8 +65,13 @@ contract Equb {
 
     Pool[] public pools;
     // Proposal[] proposals;
-    mapping(address => mapping(address => bool)) public contributions;
+    mapping(address => mapping(address => mapping(uint => bool)))
+        public contributions;
+    mapping(address => mapping(uint => uint)) public countContributor;
+    mapping(address => address) public contribut;
     mapping(address => Proposal[]) public proposalsByPool;
+    mapping(address => uint) public proposalsCount;
+    mapping(address => mapping(address => mapping(uint => bool))) public Voters;
 
     event ContributionEvent(
         address member,
@@ -74,16 +90,14 @@ contract Equb {
         uint256 amount
     );
 
-    constructor(address priceFeedAddress) {
+    constructor(address priceFeedAddress, address raiseFund) {
         priceFeed = AggregatorV3Interface(priceFeedAddress);
+        contractInstance = RaiseFundContract(raiseFund);
     }
 
-    function hasContributed(
-        address equbAddress,
-        address member
-    ) public view returns (bool) {
-        return contributions[equbAddress][member];
-    }
+    /***
+     * The write functions that display data about the smart contract
+     */
 
     function createProposal(
         address _poolAddress,
@@ -96,6 +110,10 @@ contract Equb {
         string memory _proposerTelegram,
         string memory _proposerFacebook
     ) public {
+        uint votingDuration = block.timestamp + 7 days; //timestamp in weeks
+        // bytes32 txHash = keccak256(
+        //     abi.encodePacked(block.timestamp, block.number, address(this))
+        // );
         proposalsByPool[_poolAddress].push(
             Proposal(
                 _poolAddress,
@@ -106,9 +124,14 @@ contract Equb {
                 _startupWebsite,
                 _proposerTwitter,
                 _proposerTelegram,
-                _proposerFacebook
+                _proposerFacebook,
+                votingDuration,
+                true,
+                0,
+                0
             )
         );
+        proposalsCount[_poolAddress]++;
     }
 
     function createEqub(
@@ -118,7 +141,6 @@ contract Equb {
         string memory _description,
         uint _contributionAmount,
         uint _contributionDate,
-        // uint _timeStamp,
         string memory _website,
         string memory _twitterUrl,
         string memory _facebookUrl,
@@ -154,11 +176,130 @@ contract Equb {
         numberOfPools += 1;
         // Initialize contribution records for members
         for (uint i = 0; i < _members.length; i++) {
-            contributions[msg.sender][_members[i]] = false;
+            contributions[msg.sender][_members[i]][
+                timeContract.getMonth(block.timestamp)
+            ] = false;
         }
         // uint timestamp = getCountDown()
     }
 
+    function contribute(
+        address payable equbAddress,
+        address member // uint256 usdAmount
+    ) public payable {
+        uint poolIndex = getPoolIndex(equbAddress);
+
+        uint skipCount = getRemainingSkipCount(equbAddress, member);
+        if (skipCount == 0) {
+            removeMember(equbAddress, member);
+            revert(
+                "You have skipped the contribution for three times, You will be removed from the pool."
+            );
+        }
+        // if the timestamp pass the time count escpe and generate the next timestamp
+        else {
+            require(
+                msg.sender.balance >= msg.value,
+                "Insufficient funds in wallet"
+            );
+            // require(msg.sender != equbAddress, "Cannot transfer to self");
+
+            (bool success, ) = equbAddress.call{value: msg.value}("");
+            if (success) {
+                pools[poolIndex].equbBalance += msg.value;
+                emit Action(msg.sender, "transferred", equbAddress, msg.value);
+            } else {
+                revert("Fund didnt send");
+            }
+
+            contributions[equbAddress][member][
+                timeContract.getMonth(block.timestamp)
+            ] = true;
+            countContributor[equbAddress][
+                timeContract.getMonth(block.timestamp)
+            ]++;
+            contribut[equbAddress] = member;
+            emit Action(
+                msg.sender,
+                "CONTRIBUTION RECEIVED",
+                address(equbAddress),
+                msg.value
+            );
+
+            // Emit the Contribution event
+            emit ContributionEvent(
+                member,
+                msg.value,
+                pools[poolIndex].equbBalance
+            );
+            uint256 nextContribution = getCountDown(
+                pools[poolIndex].contributionDate
+            );
+            emit NextContributionTime(nextContribution);
+        }
+    }
+
+    function voteOnProposal(
+        address equbAddress,
+        address member,
+        uint proposalId,
+        bool vote
+    ) public returns (uint[] memory) {
+        require(
+            !Voters[equbAddress][member][proposalId],
+            "You have already voted on this proposal."
+        );
+        Proposal storage proposal = proposalsByPool[equbAddress][proposalId];
+        require(proposal.status, "This proposal is no longer active.");
+        if (vote) {
+            proposal.yay++;
+        } else {
+            proposal.nay++;
+        }
+        Voters[equbAddress][member][proposalId] = true;
+        //number of voters in that month
+        uint[] memory result = new uint[](2);
+        result[0] = proposal.yay;
+        result[1] = proposal.nay;
+        return result;
+    }
+
+    function mostVotedProposal(
+        address equbAddress
+    ) public view returns (address) {
+        uint maxVotes = 0;
+        uint mostVotedProposalIndex;
+        for (uint i = 0; i < proposalsCount[equbAddress]; i++) {
+            if (proposalsByPool[equbAddress][i].yay > maxVotes) {
+                maxVotes = proposalsByPool[equbAddress][i].yay;
+                mostVotedProposalIndex = i;
+            }
+        }
+        return
+            proposalsByPool[equbAddress][mostVotedProposalIndex].startupAddress;
+    }
+
+    function hasContributed(
+        address equbAddress,
+        address member
+    ) public view returns (bool) {
+        return
+            contributions[equbAddress][member][
+                timeContract.getMonth(block.timestamp)
+            ];
+    }
+
+    function hasVoted(
+        address equbAddress,
+        address member,
+        uint proposalId
+    ) public view returns (bool) {
+        return Voters[equbAddress][member][proposalId];
+    }
+
+    /***
+     * The read functions that display data about the smart contract
+     */
     function getProposalsByPool(
         address _poolAddress
     ) public view returns (Proposal[] memory) {
@@ -229,79 +370,6 @@ contract Equb {
         return poolData;
     }
 
-    function contribution(
-        address equbAddress,
-        address member
-    ) external payable {
-        // Find the pool by equbAddress
-
-        uint poolIndex = getPoolIndex(equbAddress);
-        uint amount = (
-            priceConsumer.convertUsdToEth(pools[poolIndex].contributionAmount)
-        ) * 100000000;
-        // uint amountWei = amount * 100000000;
-        //check the member skip count
-        uint skipCount = getRemainingSkipCount(equbAddress, member);
-        if (skipCount < 3) {
-            removeMember(equbAddress, member);
-            revert(
-                "You have skipped the contribution for three times, You will be removed from the pool."
-            );
-        }
-        uint contAmount = msg.value * 1e18;
-
-        pools[poolIndex].equbBalance = (contAmount +
-            pools[poolIndex].equbBalance);
-        // require(
-        //      msg.value == amount,
-        //     "The cont amount must be equal to contributionAmount"
-        // );
-
-        // (bool success, ) = payable(member).call{value: address(this).balance}(
-        //     ""
-        // );
-
-        // // // If the transfer was successful, update the amount raised by the
-        // if (success) {
-
-        // } else {
-        //     revert("tansraction didnt go through");
-        // }
-
-        // Mark the contribution as done
-        contributions[equbAddress][member] = true;
-        emit Action(
-            msg.sender,
-            "CONTRIBUTION RECEIVED",
-            address(equbAddress),
-            msg.value
-        );
-
-        // Emit the Contribution event
-        emit ContributionEvent(member, amount, pools[poolIndex].equbBalance);
-        uint256 nextContribution = getCountDown(
-            pools[poolIndex].contributionDate
-        );
-        emit NextContributionTime(nextContribution);
-        //covert the contribution funcation
-
-        //Check the current date and compare it to the contribution date
-        // uint256 today = getCountDown(pools[poolIndex].contributionDate,);
-        //check if this is first time that member skip contribution
-        // if (contributions[equbAddress][member]) {
-        //     //increment the skip count
-        //     pools[poolIndex].contributionSkipCount += 1;
-        //     //Emit event
-        //     emit SkipContributionEvent(member, equbAddress);
-        //     if (skipCount == 2) {
-        //         //remove the member from the pool
-        //         removeMember(equbAddress, member);
-        //         emit MemberRemovedEvent(member, equbAddress);
-        //     }
-        // } else {
-        // Add the contribution amount to the pool balance
-    }
-
     function getPoolIndex(address equbAddress) private view returns (uint) {
         for (uint i = 0; i < pools.length; i++) {
             if (pools[i].equbAddress == equbAddress) {
@@ -309,6 +377,17 @@ contract Equb {
             }
         }
         revert("Pool not found");
+    }
+
+    function getEqubName(
+        address equbAddress
+    ) public view returns (string memory) {
+        //find the equb index
+        uint poolIndex = getPoolIndex(equbAddress);
+        require(poolIndex < pools.length, "Equb is not found");
+        //return the name
+        string memory equbName = pools[poolIndex].name;
+        return equbName;
     }
 
     function getRemainingSkipCount(
@@ -324,7 +403,11 @@ contract Equb {
             }
         }
         // Check if the member has contributed
-        if (!contributions[equbAddress][member]) {
+        if (
+            !contributions[equbAddress][member][
+                timeContract.getMonth(block.timestamp)
+            ]
+        ) {
             // If the member has not contributed, skipsLeft = 3
             return 3;
         } else {
@@ -346,10 +429,10 @@ contract Equb {
         //get the day from
         bool flag = setFlag(contDay);
         uint countDow;
-        // uint theDay = timeContract.getDay(block.timestamp); //18
+        uint theDay = timeContract.getDay(block.timestamp); //18
         uint theMonth = timeContract.getMonth(block.timestamp);
         uint theYear = timeContract.getYear(block.timestamp);
-        if (flag == false) {
+        if (flag == false && theDay > contDay) {
             if (theMonth == 12) {
                 uint theUpcoming = timeContract.timestampFromDate(
                     theYear + 1,
@@ -370,14 +453,45 @@ contract Equb {
         }
         //if the contribution start it
         else {
-            uint theUpcoming = timeContract.timestampFromDate(
-                theYear,
-                theMonth,
-                contDay
-            );
-            countDow = theUpcoming;
-            return countDow;
+            if (contDay > theDay) {
+                uint theUpcoming = timeContract.timestampFromDate(
+                    theYear,
+                    theMonth,
+                    contDay
+                );
+                countDow = theUpcoming;
+                return countDow;
+            } else if (contDay <= theDay) {
+                uint theUpcoming = timeContract.timestampFromDate(
+                    theYear,
+                    theMonth + 1, //start from the next month
+                    contDay
+                );
+                countDow = theUpcoming;
+                return countDow;
+            }
         }
+        return countDow;
+    }
+
+    function releaseFund(address equbAddress) public view returns (bool) {
+        uint day = timeContract.getDay(block.timestamp);
+        uint poolIndex = getPoolIndex(equbAddress);
+        if (pools[poolIndex].contributionDate == day) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    function investInStartup(
+        address payable _startup,
+        address payable equbAddress
+    ) public payable {
+        uint poolIndex = getPoolIndex(equbAddress);
+        uint amount = pools[poolIndex].equbBalance;
+        contractInstance.investInCampaign{value: amount}(_startup, equbAddress);
+        pools[poolIndex].equbBalance = 0;
     }
 
     function removeMember(address equbAddress, address member) internal {

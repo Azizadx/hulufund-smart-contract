@@ -26,16 +26,20 @@ contract RaiseFundContract {
         uint256 goal,
         uint256 deadline
     );
+    // event
+    event FundWithdrawn(uint256 index, string name, uint amount);
+    event InvestmentMade(uint256 id, address investor, uint amount);
 
     // Mapping from campaign ID to campaign data
     mapping(uint256 => FundraisingCampaign) public campaigns;
     mapping(address => uint256) public ownerCampaignCount;
+    mapping(address => uint256) public ownerCampaign;
+    mapping(address => bool) public investorsInCampaign;
 
     // The total number of campaigns
     uint256 public numberOfCampaigns = 0;
 
     // Function to create a new fundraising campaignmapping(address => uint256) public ownerCampaignCount;
-
     function createCampaign(
         string memory _logoUrl,
         string memory _bannerUrl,
@@ -110,6 +114,71 @@ contract RaiseFundContract {
         return allCampaigns;
     }
 
+    // Function to unlock the funds when the deadline and goal are reached
+    function unlockFunds(address _owner) public view returns (bool) {
+        uint256 campaignsIndex;
+        for (uint256 i = 0; i < numberOfCampaigns; i++) {
+            if (campaigns[i].owner == _owner) {
+                campaignsIndex = i;
+                break;
+            }
+        }
+
+        if (
+            (block.timestamp > campaigns[campaignsIndex].deadline &&
+                campaigns[campaignsIndex].amountRaised >=
+                campaigns[campaignsIndex].goal) ||
+            (block.timestamp < campaigns[campaignsIndex].deadline &&
+                campaigns[campaignsIndex].amountRaised >=
+                campaigns[campaignsIndex].goal)
+        ) {
+            // campaigns[campaignsIndex].status.fundsLocked = false;
+            return true;
+        } else {
+            return false; //funds locked
+        }
+    }
+
+    //function for owner to withdraw funds
+    function withdraw(address payable _owner) public {
+        // Check that the msg.sender is the owner of the campaign
+        require(
+            msg.sender == _owner,
+            "Only the campaign owner can withdraw the funds."
+        );
+
+        // Find the campaign index for the owner
+        uint256 campaignIndex;
+        for (uint256 i = 0; i < numberOfCampaigns; i++) {
+            if (campaigns[i].owner == _owner) {
+                campaignIndex = i;
+                break;
+            }
+        }
+
+        // Check that the campaign index is valid
+        require(campaignIndex < numberOfCampaigns, "Invalid campaign ID");
+
+        // Check that the contract has enough balance to transfer to the owner
+        require(
+            address(this).balance >= campaigns[campaignIndex].amountRaised,
+            "Contract has insufficient balance"
+        );
+
+        // Transfer the raised funds to the campaign owner
+        _owner.transfer(campaigns[campaignIndex].amountRaised);
+
+        // Emit the FundWithdrawn event
+        emit FundWithdrawn(
+            campaignIndex,
+            campaigns[campaignIndex].name,
+            campaigns[campaignIndex].amountRaised
+        );
+
+        // Reset the amount raised for the campaign
+        campaigns[campaignIndex].amountRaised = 0;
+    }
+
     // Function to get a campaign by its owner's address
     function getCampaignByOwnerAddress(
         address _ownerAddress
@@ -135,42 +204,77 @@ contract RaiseFundContract {
         return matchingCampaigns;
     }
 
-    // Function for investors to invest in a campaign
-    function investInCampaign(uint256 _campaignId) public payable {
-        // Get the campaign data
-        FundraisingCampaign storage campaign = campaigns[_campaignId];
+    function getStartupIndex(address startup) public view returns (uint) {
+        for (uint i = 0; i < numberOfCampaigns; i++) {
+            if (campaigns[i].owner == startup) {
+                return i;
+            }
+        }
+        revert("startup not found");
+    }
 
+    function getFundRaiseGoal(address startup) public view returns (uint) {
+        //get the startup index
+        uint startupIndex = getStartupIndex(startup);
+        return campaigns[startupIndex].goal;
+    }
+
+    function getMimiInvestment(address startup) public view returns (uint) {
+        //get the startup index
+        uint startupIndex = getStartupIndex(startup);
+        return campaigns[startupIndex].minInvestment;
+    }
+
+    function investInCampaign(
+        address payable _startup,
+        address payable equbAddress
+    ) external payable {
+        require(
+            equbAddress != _startup,
+            "you cant invest to  your own startup"
+        );
+        uint256 campaignId;
+        for (uint256 i = 0; i < numberOfCampaigns; i++) {
+            if (campaigns[i].owner == _startup) {
+                campaignId = i;
+                break;
+            }
+        }
         // Check that the campaign exists
         require(
-            _campaignId < numberOfCampaigns,
+            campaignId < numberOfCampaigns,
             "The specified campaign does not exist"
         );
 
         // Check that the investment amount is at least the minimum investment
         require(
-            msg.value >= campaign.minInvestment,
+            msg.value >= campaigns[campaignId].minInvestment,
             "The investment must be at least the minimum investment"
         );
-
+        // require(
+        //     goal <= campaigns[campaignId].goal,
+        //     "The investment can not be larger than fund raise goal"
+        // );
         // Check that the campaign deadline has not passed
         require(
-            block.timestamp <= campaign.deadline,
+            block.timestamp <= campaigns[campaignId].deadline,
             "The campaign deadline has passed"
         );
 
+        // Check that the investor has not already invested in the campaign
+        require(
+            !investorsInCampaign[msg.sender],
+            "You have already invested in this campaign"
+        );
+        campaigns[campaignId].amountRaised += msg.value;
         // Add the investor's address to the list of investors
-        campaign.investors.push(msg.sender);
-
-        // Send the investment amount to the campaign owner
-        (bool success, ) = payable(campaign.owner).call{value: msg.value}("");
-
-        // If the transfer was successful, update the amount raised by the campaign
-        if (success) {
-            campaign.amountRaised += msg.value;
-        }
+        campaigns[campaignId].investors.push(equbAddress);
+        // Add the investor's address to the list of investors
+        investorsInCampaign[msg.sender] = true;
     }
 
     // Function to get a list of investors in a campaign
+
     function getInvestors(
         uint256 _campaignId
     ) public view returns (address[] memory) {
