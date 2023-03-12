@@ -1,47 +1,31 @@
-## Getting Started
+# About the project
+This is a Solidity smart contract designed for [hulufund](https://hulufund.vercel.app) which a blockchain based investment platform for startup In Ethiopia.
 
-Create a project using this example:
+## Usage
+To use this smart contract, you will need to deploy it on the Ethereum blockchain using a development environment like Hardhat or Remix. The Project contain three smart contract and one solidity libray 
 
-```bash
-npx thirdweb create --contract --template hardhat-javascript-starter
-```
 
-You can start editing the page by modifying `contracts/Contract.sol`.
+## Try it yourself
 
-To add functionality to your contracts, you can use the `@thirdweb-dev/contracts` package which provides base contracts and extensions to inherit. The package is already installed with this project. Head to our [Contracts Extensions Docs](https://portal.thirdweb.com/contractkit) to learn more.
-
-## Building the project
-
-After any changes to the contract, run:
-
-```bash
-npm run build
-# or
-yarn build
-```
-
-to compile your contracts. This will also detect the [Contracts Extensions Docs](https://portal.thirdweb.com/contractkit) detected on your contract.
-
-## Deploying Contracts
-
-When you're ready to deploy your contracts, just run one of the following command to deploy you're contracts:
-
-```bash
-npm run deploy
-# or
+```shell
+git clone https://github.com/Azizadx/hulufund-smart-contract
+yarn
+yarn compile
 yarn deploy
 ```
 
-## Releasing Contracts
+## Authors
 
-If you want to release a version of your contracts publicly, you can use one of the followings command:
+👤 **Nasrallah**
 
-```bash
-npm run release
-# or
-yarn release
-```
+- GitHub: [@Azizadx](https://github.com/Azizadx)
 
-## Join our Discord!
+## 🙌 Want to Contribute?
 
-For any questions, suggestions, join our discord at [https://discord.gg/thirdweb](https://discord.gg/thirdweb).
+* 🐛 [Report an issue](../../issues/)
+
+
+## Show your support
+![Alt Text](https://media.giphy.com/media/GTO6zNnYr5Wv0p8gAT/giphy.gif)
+
+Note this is not whole project some codes are private 
